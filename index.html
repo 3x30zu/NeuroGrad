@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Нейроград - Ваш AI-Город</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Font for a softer and rounder look -->
+    <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-neon-blue: #66d9ef; /* Softer blue */
+            --secondary-neon-pink: #f92672; /* Softer pink */
+            --accent-purple: #ae81ff;   /* Softer purple */
+            --accent-teal: #a6e22e;     /* Softer teal */
+            --dark-bg: #1a1a2e;         /* Deep dark background */
+            --card-bg: rgba(30, 30, 46, 0.85); /* Card background with transparency */
+            --card-border: rgba(102, 217, 239, 0.6); /* Card border */
+            --text-light: #e0e0e0;      /* Light text */
+            --text-medium: #b0b0b0;     /* Medium text */
+            --text-dark: #3a3a5a;       /* Dark text */
+        }
+
+        body {
+            font-family: 'Comfortaa', cursive; /* Apply new font */
+            background-color: var(--dark-bg); /* Default background color */
+            color: var(--text-light);
+            overflow-x: hidden; /* Important so canvas doesn't create scrollbar */
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            margin: 0; /* Remove default body margins */
+        }
+
+        /* Canvas for three.js background */
+        #bg-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1; /* Place behind all content */
+            display: block; /* Remove extra space below canvas */
+        }
+
+        /* Styles for cards and other elements remain, but content z-index must be higher than background */
+        header, main, footer {
+            position: relative;
+            z-index: 1;
+        }
+
+        .building-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 20px; /* More rounded corners */
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease;
+            backdrop-filter: blur(12px); /* Increase blur for better contrast with 3D background */
+            min-height: 240px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden; 
+            position: relative;
+        }
+        
+        .building-card::before { 
+            content: "";
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            border-radius: 20px; /* More rounded corners */
+            background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(102, 217, 239, 0.3), transparent 70%);
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            pointer-events: none; 
+        }
+
+        .building-card:hover::before {
+            opacity: 1;
+        }
+
+        .building-card:hover {
+            transform: translateY(-12px) scale(1.04);
+            box-shadow: 0 0 40px rgba(102, 217, 239, 0.7), 0 0 20px rgba(174, 129, 255, 0.5); /* Updated shadows */
+            border-color: var(--primary-neon-blue);
+        }
+
+        .building-icon {
+            font-size: 3.5rem; /* Slightly larger icon */
+            line-height: 1;
+            margin-bottom: 1.25rem;
+            color: var(--primary-neon-blue);
+            text-shadow: 0 0 12px var(--primary-neon-blue), 0 0 25px rgba(102, 217, 239, 0.6); /* Enhanced glow */
+            transition: transform 0.3s ease;
+        }
+        .building-card:hover .building-icon {
+            transform: scale(1.15); /* Slightly larger scale */
+        }
+
+        .modal {
+            display: none; 
+            position: fixed;
+            z-index: 1000; /* Modal window should be on top of everything */
+            left: 0; top: 0;
+            width: 100%; height: 100%;
+            overflow: auto;
+            background-color: rgba(26, 26, 46, 0.9); /* Darker and more saturated modal background */
+            backdrop-filter: blur(15px); /* Increase blur */
+        }
+
+        .modal-content {
+            background: linear-gradient(145deg, var(--dark-bg), #2a2a4a); /* Deeper gradient */
+            margin: 8% auto;
+            padding: 35px; /* Slightly more padding */
+            border: 1px solid var(--accent-purple);
+            border-radius: 20px; /* More rounded corners */
+            width: 90%;
+            max-width: 700px; /* Slightly wider modal */
+            box-shadow: 0 0 50px rgba(174, 129, 255, 0.6); /* Enhanced shadow */
+            position: relative;
+            animation: modalAppear 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes modalAppear {
+            from { opacity: 0; transform: translateY(-80px) scale(0.85); } /* Slightly more animation */
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .close-button {
+            position: absolute;
+            top: 20px; /* Top offset */
+            right: 25px; /* Right offset */
+            color: var(--text-medium);
+            font-size: 36px; /* Slightly larger close button */
+            font-weight: bold;
+            transition: color 0.3s ease, transform 0.3s ease;
+        }
+
+        .close-button:hover,
+        .close-button:focus {
+            color: var(--primary-neon-blue);
+            text-decoration: none;
+            cursor: pointer;
+            transform: rotate(180deg) scale(1.1); /* More pronounced animation */
+        }
+
+        .glitch-text {
+            position: relative;
+            font-weight: 700; /* Softer font, so reduce boldness */
+            color: #fff;
+            text-shadow: 
+                -2px -2px 0 var(--primary-neon-blue),  
+                 2px -2px 0 var(--secondary-neon-pink),
+                -2px  2px 0 var(--primary-neon-blue),
+                 2px  2px 0 var(--secondary-neon-pink);
+            animation: glitch 3s infinite cubic-bezier(0.25, 0.46, 0.45, 0.94) both alternate, 
+                       text-glow-wave 4s infinite alternate; /* Combined animations */
+            letter-spacing: 0.05em; /* Small letter spacing */
+        }
+        
+        @keyframes glitch {
+            0%, 100% { transform: translate(0, 0); text-shadow: -2px -2px 0 var(--primary-neon-blue), 2px -2px 0 var(--secondary-neon-pink), -2px 2px 0 var(--primary-neon-blue), 2px 2px 0 var(--secondary-neon-pink); }
+            10% { transform: translate(-3px, 2px); text-shadow: -2px -2px 0 var(--secondary-neon-pink), 2px -2px 0 var(--primary-neon-blue), -2px 2px 0 var(--secondary-neon-pink), 2px 2px 0 var(--primary-neon-blue), 3px 3px 0 var(--accent-purple); }
+            20% { transform: translate(2px, -3px); }
+            30% { transform: translate(-3px, -2px); text-shadow: -2px -2px 0 var(--primary-neon-blue), 2px -2px 0 var(--accent-purple), -2px 2px 0 var(--primary-neon-blue), 2px 2px 0 var(--secondary-neon-pink), -3px -3px 0 var(--secondary-neon-pink); }
+            40% { transform: translate(2px, 3px); }
+            50% { transform: translate(0, 0); text-shadow: -2px -2px 0 var(--accent-purple), 2px -2px 0 var(--primary-neon-blue), -2px 2px 0 var(--accent-purple), 2px 2px 0 var(--primary-neon-blue); }
+            60% { transform: translate(3px, 2px); }
+            70% { transform: translate(-2px, -3px); text-shadow: -2px -2px 0 var(--secondary-neon-pink), 2px -2px 0 var(--primary-neon-blue), -2px 2px 0 var(--secondary-neon-pink), 2px 2px 0 var(--accent-purple), 3px -2px 0 var(--primary-neon-blue); }
+            80% { transform: translate(-3px, 2px); }
+            90% { transform: translate(2px, 3px); }
+        }
+
+        @keyframes text-glow-wave {
+            0% { text-shadow: 0 0 10px var(--primary-neon-blue), 0 0 20px var(--secondary-neon-pink); transform: scale(1); }
+            25% { text-shadow: 0 0 15px var(--accent-teal), 0 0 25px var(--primary-neon-blue); transform: scale(1.02); }
+            50% { text-shadow: 0 0 10px var(--secondary-neon-pink), 0 0 20px var(--accent-purple); transform: scale(1); }
+            75% { text-shadow: 0 0 15px var(--primary-neon-blue), 0 0 25px var(--accent-teal); transform: scale(1.02); }
+            100% { text-shadow: 0 0 10px var(--accent-purple), 0 0 20px var(--secondary-neon-pink); transform: scale(1); }
+        }
+        
+        .header-subtitle {
+            animation: fadeInFromBottom 2.5s ease-in-out 0.7s forwards; /* Slightly slower animation */
+            opacity: 0;
+            color: var(--text-light); /* Ensure text color is correct */
+        }
+
+        @keyframes fadeInFromBottom {
+            from { opacity: 0; transform: translateY(40px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .building-card-enter-animation {
+            animation: popInDetailed 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; /* Slightly slower animation */
+            opacity: 0; 
+        }
+
+        @keyframes popInDetailed {
+            0% { opacity: 0; transform: scale(0.6) translateY(40px) rotateX(-30deg); } /* More pronounced animation */
+            100% { opacity: 1; transform: scale(1) translateY(0) rotateX(0deg); }
+        }
+        
+        .btn-primary {
+            background: linear-gradient(45deg, var(--primary-neon-blue), var(--accent-teal));
+            color: var(--dark-bg);
+            padding: 0.85rem 1.75rem; /* Slightly more padding */
+            border-radius: 12px; /* More rounded corners */
+            font-weight: 700; 
+            transition: all 0.3s ease;
+            text-align: center;
+            border: none;
+            box-shadow: 0 6px 20px rgba(102, 217, 239, 0.5); /* Updated shadow */
+        }
+        .btn-primary:hover {
+            background: linear-gradient(45deg, var(--accent-teal), var(--primary-neon-blue));
+            transform: scale(1.1) translateY(-3px); /* More pronounced animation */
+            box-shadow: 0 8px 25px rgba(102, 217, 239, 0.8); /* Enhanced shadow */
+        }
+
+        .section-title {
+            font-size: 2.8rem; /* Slightly larger heading */
+            font-weight: 700; /* Softer font, so reduce boldness */
+            margin-bottom: 2.5rem; /* Slightly more margin */
+            text-align: center;
+            color: var(--primary-neon-blue);
+            text-shadow: 0 0 12px var(--primary-neon-blue), 0 0 6px #fff; /* Enhanced glow */
+            animation: pulseGlow 2.5s infinite alternate; /* Slightly slower animation */
+        }
+
+        @keyframes pulseGlow {
+            from { text-shadow: 0 0 10px var(--primary-neon-blue), 0 0 5px #fff; }
+            to { text-shadow: 0 0 20px var(--primary-neon-blue), 0 0 10px #fff, 0 0 5px var(--accent-teal); }
+        }
+
+        .featured-service-card {
+            background: linear-gradient(135deg, var(--accent-purple), var(--primary-neon-blue));
+            color: white;
+            border-radius: 25px; /* More rounded corners */
+            padding: 2.5rem; /* Slightly more padding */
+            margin-bottom: 3.5rem; /* Slightly more margin */
+            box-shadow: 0 12px 35px rgba(174, 129, 255, 0.6); /* Enhanced shadow */
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            animation: fadeInScaleUp 1.2s ease-out; /* Slightly slower animation */
+        }
+        .featured-service-card:hover {
+            transform: scale(1.05); /* More pronounced animation */
+            box-shadow: 0 18px 45px rgba(174, 129, 255, 0.8); /* Enhanced shadow */
+        }
+
+        @keyframes fadeInScaleUp {
+            from { opacity: 0; transform: scale(0.85); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .news-item {
+            background-color: rgba(40, 40, 60, 0.7); /* Darker and more saturated background */
+            padding: 1.25rem 1.75rem; /* Slightly more padding */
+            border-radius: 12px; /* More rounded corners */
+            margin-bottom: 1.25rem; /* Slightly more margin */
+            border-left: 5px solid var(--accent-teal); /* Slightly thicker border */
+            transition: background-color 0.3s ease, transform 0.3s ease;
+        }
+        .news-item:hover {
+            background-color: rgba(50, 50, 70, 0.9); /* More pronounced hover */
+            transform: translateX(8px); /* Slightly more offset */
+        }
+        .news-item h4 {
+            color: var(--accent-teal);
+        }
+
+        .modal-details-list {
+            list-style: none;
+            padding-left: 0;
+        }
+        .modal-details-list li {
+            padding: 0.6rem 0; /* Slightly more padding */
+            border-bottom: 1px solid rgba(102, 217, 239, 0.3); /* Updated border */
+            color: var(--text-medium);
+            transition: color 0.3s ease, padding-left 0.3s ease;
+        }
+        .modal-details-list li:last-child {
+            border-bottom: none;
+        }
+        .modal-details-list li:hover {
+            color: var(--primary-neon-blue);
+            padding-left: 15px; /* Slightly more offset */
+        }
+        .modal-details-list li::before {
+            content: "✦ "; /* Change symbol */
+            color: var(--accent-teal);
+            margin-right: 10px; /* Slightly more offset */
+        }
+    </style>
+</head>
+<body>
+    <canvas id="bg-canvas"></canvas> <!-- Canvas for 3D background -->
+
+    <header class="py-10 md:py-16 text-center">
+        <h1 class="text-6xl md:text-8xl font-bold mb-3 glitch-text">Нейроград</h1>
+        <p class="text-2xl md:text-3xl text-gray-200 header-subtitle">Исследуйте Город Будущего, созданный Искусственным Интеллектом!</p>
+    </header>
+
+    <main class="container mx-auto px-4 py-8 flex-grow">
+        
+        <section id="featuredServiceSection" class="mb-12 md:mb-16">
+            <h2 class="section-title">Сервис Дня</h2>
+            <div id="featuredServiceCard" class="featured-service-card text-center">
+                <!-- Content will be added by JS -->
+            </div>
+        </section>
+
+        <h2 class="section-title">Районы Нейрограда</h2>
+        <div id="buildingsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-8 md:gap-10">
+            <!-- Building cards -->
+        </div>
+
+        <section id="newsSection" class="mt-12 md:mt-16">
+            <h2 class="section-title">Новости Нейрограда</h2>
+            <div id="newsList" class="max-w-2xl mx-auto">
+                <!-- News -->
+            </div>
+        </section>
+    </main>
+
+    <footer class="text-center py-8 mt-auto">
+        <p class="text-sm text-gray-400">&copy; <span id="currentYear"></span> Нейроград. Вселенная возможностей (концепт).</p>
+    </footer>
+
+    <div id="buildingModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal()">&times;</span>
+            <div class="text-center mb-6">
+                <div id="modalIcon" class="text-6xl mb-4"></div>
+                <h2 id="modalTitle" class="text-4xl font-bold text-sky-300">Название Здания</h2>
+            </div>
+            <p class="text-gray-300 mb-3 text-lg">Добро пожаловать в <span id="modalBuildingNameStrong" class="font-semibold text-sky-400"></span>! Здесь вы можете:</p>
+            <ul id="modalDescription" class="modal-details-list mb-8"></ul>
+            <div class="bg-yellow-900 bg-opacity-40 border border-yellow-500 text-yellow-200 px-6 py-4 rounded-xl relative" role="alert">
+                <strong class="font-bold block text-lg mb-1">🚧 Внимание! Раздел в активной разработке! 🚧</strong>
+                <span class="block sm:inline">Полный функционал этого района Нейрограда скоро будет доступен. Следите за обновлениями!</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- START OF THREE.JS BACKGROUND SCRIPT ---
+        let scene, camera, renderer, grid;
+        let mouseX = 0, mouseY = 0;
+
+        function initThreeJS() {
+            // Create scene
+            scene = new THREE.Scene();
+
+            // Create camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.set(0, 50, 200); // Adjusted camera position for better grid visibility
+
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({
+                canvas: document.getElementById("bg-canvas"),
+                antialias: true // Enable anti-aliasing
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x000000, 0); // Transparent background for renderer
+
+            // Create 3D grid
+            const size = 1000; // Size of the grid
+            const divisions = 50; // Number of divisions along each axis
+            const step = size / divisions;
+
+            const geometry = new THREE.BufferGeometry();
+            const vertices = [];
+
+            // Generate lines along X and Z axes
+            for (let i = 0; i <= divisions; i++) {
+                const x = -size / 2 + i * step;
+                // Vertical lines (along Z-axis)
+                vertices.push(x, 0, -size / 2);
+                vertices.push(x, 0, size / 2);
+                // Horizontal lines (along X-axis)
+                vertices.push(-size / 2, 0, x);
+                vertices.push(size / 2, 0, x);
+            }
+
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+
+            const material = new THREE.LineBasicMaterial({
+                color: 0x66d9ef, // Primary neon blue for the grid
+                transparent: true,
+                opacity: 0.5, // Increased opacity for better visibility
+                linewidth: 1 // Line thickness
+            });
+
+            grid = new THREE.LineSegments(geometry, material);
+            scene.add(grid);
+
+            // Event listeners for mouse movement to control camera look
+            document.addEventListener('mousemove', onDocumentMouseMove, false);
+            window.addEventListener("resize", onWindowResize, false);
+
+            // Start animation
+            animateGrid();
+        }
+
+        // Function for mouse movement to control camera look
+        function onDocumentMouseMove(event) {
+            mouseX = (event.clientX - window.innerWidth / 2);
+            mouseY = (event.clientY - window.innerHeight / 2);
+        }
+
+        // Grid animation function
+        function animateGrid() {
+            // Rotate the grid to give a dynamic feel without moving it away
+            grid.rotation.x += 0.001;
+            grid.rotation.y += 0.0005;
+
+            // Add subtle camera oscillation for a "professional camera" feel
+            camera.position.y = 50 + Math.sin(Date.now() * 0.0005) * 10;
+            camera.position.x = Math.cos(Date.now() * 0.0003) * 5;
+
+            // Smooth camera look adjustment based on mouse
+            camera.rotation.y += ((-mouseX * 0.000008) - camera.rotation.y) * 0.05;
+            camera.rotation.x += ((-mouseY * 0.000008) - camera.rotation.x) * 0.05;
+            
+            renderer.render(scene, camera);
+            requestAnimationFrame(animateGrid);
+        }
+
+        // Function to handle window resize
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        // Initialize three.js after DOM is loaded
+        document.addEventListener('DOMContentLoaded', initThreeJS);
+
+        // --- END OF THREE.JS BACKGROUND SCRIPT ---
+
+
+        // --- START OF MAIN PAGE SCRIPT (buildings, modals, etc.) ---
+        const buildings = [
+            { 
+                id: "library", 
+                name: "Библиотека 'Архивариус AI'", 
+                icon: "📚",
+                description: "Интеллектуальная библиотека, где AI помогает находить, анализировать и синтезировать информацию. Умный поиск, саммаризация текстов и персональные рекомендации.",
+                details: ["Глубокий AI-поиск по миллионам источников", "Автоматическое создание кратких саммари текстов любой сложности", "Персональные книжные рекомендации на основе ваших интересов", "Интерактивные учебные модули с AI-ассистентом"],
+                catchphrase: "Знания без границ с мощью AI!"
+            },
+            { 
+                id: "restaurant", 
+                name: "Ресторан 'Нейро-Шеф'", 
+                icon: "🍲",
+                description: "Виртуальный ресторан с AI-шеф-поваром. Генерация рецептов, подбор напитков и персонализированные планы питания.",
+                details: ["Создание уникальных рецептов из доступных ингредиентов", "AI-сомелье для идеального подбора напитков", "Персонализированные планы питания от AI-диетолога", "Виртуальные гастрономические туры (концепт)"],
+                catchphrase: "Откройте новые горизонты вкуса!"
+            },
+            { 
+                id: "school", 
+                name: "Онлайн-школа 'Эрудит AI'", 
+                icon: "🎓",
+                description: "Платформа для обучения с AI-преподавателями. Адаптивные курсы, AI-менторство и генерация учебных материалов.",
+                details: ["Адаптивные курсы по востребованным направлениям", "Личный AI-ментор для отслеживания прогресса", "Автоматическая генерация тестов и практических заданий", "Интерактивные симуляторы для закрепления знаний"],
+                catchphrase: "Учитесь эффективно с персональным AI-наставником!"
+            },
+            { 
+                id: "psychologist", 
+                name: "Кабинет Психолога 'Эмпат AI'", 
+                icon: "🧠",
+                description: "Конфиденциальное пространство для психологической поддержки. AI-чат-бот, дневник настроения и практики осознанности.",
+                details: ["Круглосуточный AI-чат-бот для эмоциональной поддержки", "Анализ дневника настроения с выявлением паттернов", "Управляемые медитации и техники релаксации", "Подборка проверенных психологических материалов"],
+                catchphrase: "Ваш чуткий AI-помощник на пути к гармонии."
+            },
+            { 
+                id: "cinema", 
+                name: "Кинотеатр 'Синема AI'", 
+                icon: "🎬",
+                description: "Интеллектуальный кинотеатр с AI-куратором. Продвинутые рекомендации фильмов и генерация 'трейлеров настроения'.",
+                details: ["Ультра-персональные рекомендации фильмов и сериалов", "Создание 'трейлеров настроения' по вашему запросу", "Интерактивный поиск 'фильм как X, но с Y'", "Обсуждения с AI-модерацией и анализом мнений"],
+                catchphrase: "Идеальный фильм для любого момента – просто спросите AI!"
+            },
+            { 
+                id: "cosmetics", 
+                name: "Магазин косметики 'Бьюти AI'", 
+                icon: "💄",
+                description: "Виртуальный магазин косметики с AI-консультантом. Анализ кожи, виртуальный подбор макияжа (AR) и персональные рекомендации.",
+                details: ["Точный AI-анализ состояния вашей кожи по фото", "Виртуальная 'примерка' макияжа с технологией AR", "Индивидуальные рекомендации косметических продуктов", "Разбор составов косметики с AI-экспертом"],
+                catchphrase: "Раскройте свою красоту с помощью умных технологий!"
+            },
+            { 
+                id: "stylist", 
+                name: "AI Стилист 'Имидж AI'", 
+                icon: "👗",
+                description: "Персональный AI-стилист для подбора одежды. Анализ фигуры и цветотипа, создание виртуальных образов и отслеживание трендов.",
+                details: ["Анализ фигуры и цветотипа для идеальных образов", "Создание виртуальных луков из каталогов или вашего гардероба", "Подбор стиля для любого события и настроения", "Персональный AI-трендвотчер модных новинок"],
+                catchphrase: "Ваш безупречный стиль – забота AI!"
+            }
+        ];
+
+        const buildingsGrid = document.getElementById('buildingsGrid');
+        const modal = document.getElementById('buildingModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalIcon = document.getElementById('modalIcon');
+        const modalDescription = document.getElementById('modalDescription');
+        const modalBuildingNameStrong = document.getElementById('modalBuildingNameStrong');
+        
+        const featuredServiceCard = document.getElementById('featuredServiceCard');
+        const newsList = document.getElementById('newsList');
+
+        const featuredBuilding = buildings[Math.floor(Math.random() * buildings.length)];
+        featuredServiceCard.innerHTML = `
+            <div class="building-icon text-5xl mb-4">${featuredBuilding.icon}</div>
+            <h3 class="text-3xl font-bold mb-2">${featuredBuilding.name}</h3>
+            <p class="text-lg mb-4 opacity-90">${featuredBuilding.catchphrase}</p>
+            <p class="text-md mb-6 opacity-80">${featuredBuilding.description.substring(0,150)}...</p>
+            <button class="btn-primary py-3 px-8 text-lg" onclick="openModal('${featuredBuilding.id}')">Узнать больше</button>
+        `;
+        
+        buildings.forEach((building, index) => {
+            const card = document.createElement('div');
+            card.className = 'building-card p-6 md:p-8 cursor-pointer building-card-enter-animation';
+            card.style.animationDelay = `${index * 0.08 + 0.5}s`; 
+            card.innerHTML = `
+                <div>
+                    <div class="building-icon">${building.icon}</div>
+                    <h3 class="text-2xl font-semibold mb-3 text-sky-300">${building.name}</h3>
+                    <p class="text-sm text-gray-300 mb-4 leading-relaxed">${building.description.substring(0, 90)}...</p>
+                </div>
+                <button class="btn-primary mt-auto w-full" onclick="event.stopPropagation(); openModal('${building.id}')">Узнать больше</button>
+            `;
+            card.onclick = () => openModal(building.id);
+            
+            card.addEventListener('mousemove', e => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                card.style.setProperty('--mouse-x', `${x}px`);
+                card.style.setProperty('--mouse-y', `${y}px`);
+            });
+            buildingsGrid.appendChild(card);
+        });
+
+        const cityNews = [
+            { title: "Нейроград расширяется!", date: "04.06.2025", content: "Запланировано открытие нового района 'AI Арт-Галерея'. Ожидайте невероятные цифровые выставки!"},
+            { title: "Обновление 'Эмпат AI'", date: "02.06.2025", content: "Психологический помощник получил новые модули для борьбы со стрессом."},
+            { title: "Фестиваль Нейро-Кухни", date: "29.05.2022", content: "'Нейро-Шеф' приглашает на виртуальный фестиваль инновационных блюд. Скоро!"}
+        ];
+
+        cityNews.forEach(news => {
+            const newsDiv = document.createElement('div');
+            newsDiv.className = 'news-item animate-fadeIn'; 
+            newsDiv.innerHTML = `
+                <h4 class="text-lg font-semibold mb-1">${news.title}</h4>
+                <p class="text-xs text-gray-400 mb-2">${news.date}</p>
+                <p class="text-sm text-gray-300">${news.content}</p>
+            `;
+            newsList.appendChild(newsDiv);
+        });
+        
+        const styleSheet = document.createElement("style");
+        styleSheet.type = "text/css";
+        styleSheet.innerText = `
+            .animate-fadeIn { animation: fadeIn 0.5s ease-out forwards; opacity: 0; }
+            @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        `;
+        document.head.appendChild(styleSheet);
+
+        function openModal(buildingId) {
+            const building = buildings.find(b => b.id === buildingId);
+            if (building) {
+                modalTitle.textContent = building.name;
+                modalIcon.innerHTML = building.icon; 
+                modalBuildingNameStrong.textContent = building.name;
+                
+                let detailsHtml = '';
+                if (Array.isArray(building.details)) {
+                    building.details.forEach(detail => {
+                        detailsHtml += `<li>${detail}</li>`;
+                    });
+                } else { 
+                    detailsHtml = `<li>${building.details}</li>`;
+                }
+                modalDescription.innerHTML = detailsHtml;
+
+                modal.style.display = "block";
+                document.body.style.overflow = 'hidden';
+            }
+        }
+
+        function closeModal() {
+            modal.style.display = "none";
+            document.body.style.overflow = 'auto';
+        }
+
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+        
+        document.addEventListener('keydown', function(event) {
+            if (event.key === "Escape") {
+                if (modal.style.display === "block") {
+                    closeModal();
+                }
+            }
+        });
+
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+        // --- END OF MAIN PAGE SCRIPT ---
+    </script>
+</body>
+</html>
